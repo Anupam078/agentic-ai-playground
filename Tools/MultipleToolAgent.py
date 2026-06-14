@@ -55,7 +55,7 @@ def convert_time(time_str: str, from_timezone: str, to_timezone: str) -> dict:
             "message": "Could not parse time"
         }
     
-    def get_weather(city: str) -> dict:
+def get_weather(city: str) -> dict:
 
      weather_data = {
         "chennai":   {"temp": 34, "condition": "Sunny",  "humidity": 78, "unit": "°C"},
@@ -77,8 +77,7 @@ def convert_time(time_str: str, from_timezone: str, to_timezone: str) -> dict:
         }
      return {"status": "error", "message": f"City '{city}' not found in database"}
 
-    
-    ALL_TOOLS = [
+ALL_TOOLS = [
     {
         "type": "function",
         "function": {
@@ -145,3 +144,115 @@ def convert_time(time_str: str, from_timezone: str, to_timezone: str) -> dict:
         }
     }
 ]
+
+Tool_MAP = {
+    "get_weather": get_weather,
+    "calculate": calculate,
+    "convert_time": convert_time
+}
+
+
+class WeatherChatbot:
+    """A stateful chatbot - remembers the conversation (short-term memory)"""
+
+    def __init__(self):
+        self.history = []
+
+        self.system = (
+            "You are a helpful weather assistant for India. "
+            "When asked about weather, always use the get_weather tool. "
+            "Remember what city the user mentioned earlier in the conversation."
+        )
+
+    def chat(self, user_input: str):
+
+        print(f"\n👤 You : {user_input}")
+
+        # Store user message in memory
+        self.history.append({
+            "role": "user",
+            "content": user_input
+        })
+
+        messages = [
+            {
+                "role": "system",
+                "content": self.system
+            }
+        ] + self.history
+
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            tools=weather_tool_schema,
+            tool_choice="auto"
+        )
+
+        msg = response.choices[0].message
+        finish_reason = response.choices[0].finish_reason
+
+        if finish_reason == "tool_calls" and msg.tool_calls:
+
+            tool_call = msg.tool_calls[0]
+
+            tool_args = json.loads(
+                tool_call.function.arguments
+            )
+
+            tool_result = get_weather(**tool_args)
+
+            print(
+                f" [Tool called: get_weather({tool_args})]"
+            )
+
+            self.history.append(msg)
+
+            self.history.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": json.dumps(tool_result)
+            })
+
+            messages = [
+                {
+                    "role": "system",
+                    "content": self.system
+                }
+            ] + self.history
+
+            final = client.chat.completions.create(
+                model=MODEL,
+                messages=messages
+            )
+
+            reply = final.choices[0].message.content
+
+            self.history.append({
+                "role": "assistant",
+                "content": reply
+            })
+
+        else:
+
+            reply = msg.content
+
+            self.history.append({
+                "role": "assistant",
+                "content": reply
+            })
+
+        print(f"🤖 Agent : {reply}")
+        print(
+            f" [Memory: {len(self.history)} messages stored]"
+        )
+
+        return reply
+
+
+bot = WeatherChatbot()
+
+bot.chat("Hi! I live in Coimbatore.")
+
+bot.chat("What's the weather like today?")
+
+bot.chat("Should I take an umbrella when I go out?")
