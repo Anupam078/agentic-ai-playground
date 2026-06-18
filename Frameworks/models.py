@@ -4,7 +4,7 @@ from langchain_ollama import ChatOllama
 # temperature=0.7 → creative, for content generation
 
 llm = ChatOllama(
-    model="qwen2.5:3b",  # Ollama model name
+    model="llama3.1",  # Ollama model name
     temperature=0,
     num_predict=512  # max tokens per response
 )
